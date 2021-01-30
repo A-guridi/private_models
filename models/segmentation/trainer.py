@@ -16,13 +16,13 @@ class trainer:
     def __init__(self,
                  model,
                  backbone="resnet101",
-                 input_shape=(224, 224, 3),
+                 im_size=224,
                  num_classes=2,
                  batch_size=4,
                  epochs=10):
         self.model = str(model).lower()
         self.bacbone = backbone
-        self.input_shape = input_shape
+        self.img_size = im_size
         self.batch_size = batch_size
         self.epochs = epochs
         self.steps = None
@@ -33,6 +33,7 @@ class trainer:
         self.val_gen = None
         self.callbacks = None
         self.metrics = []
+        self.input_shape = (self.img_size, self.img_size, 3)
         self.num_classes = num_classes
         if self.num_classes == 2:
             self.activation = "sigmoind"
