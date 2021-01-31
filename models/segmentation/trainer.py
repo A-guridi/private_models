@@ -96,5 +96,6 @@ class trainer:
         self.hist = self.model.fit_generator(self.train_gen, steps_per_epoc=self.steps, epochs=self.epochs,
                                              verbose=1, callbacks=self.callbacks, validation_data=self.val_gen)
 
+    def printhist(self):
         print(self.hist)
 
