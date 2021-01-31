@@ -10,7 +10,7 @@ import cv2
 import segmentation_models as sm
 import os
 from pathlib import Path
-from private_models.models.utils.generators import SegmDataGenerator
+from models.utils.generators import SegmDataGenerator
 
 
 class trainer:

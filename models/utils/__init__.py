@@ -48,11 +48,11 @@ def create_datasets(dir):
     img_set = []
     lab_set = []
 
-    for idx, (ts, ls) in enumerate(zip(sets, lb_sets)):
+    for ts, ls in zip(sets, lb_sets):
         im_dir = os.path.join(dir, ts)
         lab_dir = os.path.join(dir, ls)
-        img_set[idx] = [im for im in Path(im_dir).iterdir()]
-        lab_set[idx] = [lb for lb in Path(lab_dir).iterdir()]
+        img_set.append([im for im in Path(im_dir).iterdir()])
+        lab_set.append([lb for lb in Path(lab_dir).iterdir()])
 
     train_df = pd.DataFrame({"image": img_set[0],
                              "label": lab_set[0]})
