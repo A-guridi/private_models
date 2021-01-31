@@ -97,5 +97,4 @@ class trainer:
                                              verbose=1, callbacks=self.callbacks, validation_data=self.val_gen)
 
         print(self.hist)
-        plt.plot(self.hist)
-        print("end")
+
