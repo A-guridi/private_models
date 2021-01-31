@@ -4,6 +4,7 @@ from PIL import Image
 import pandas as pd
 import os
 import scipy.io
+import cv2
 
 
 def infer_num_classes(dir):
@@ -17,9 +18,11 @@ def infer_num_classes(dir):
 
     bincount = []
     for mask in Path(dir).iterdir():
-        m = Image.open(mask)
-        m = np.array(m)
-        bincount.append(np.unique(m))
+        #m = Image.open(mask).convert("L")
+        m = cv2.imread(str(mask))
+        m = cv2.cvtColor(m, cv2.COLOR_BGR2GRAY)
+        m = np.array(m).flatten()
+        bincount.extend(list(np.unique(m)))
 
     return len(np.unique(bincount))
 

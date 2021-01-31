@@ -2,15 +2,15 @@
 Trainer class that creates a segmentation model and trains it
 Using quvbel segmentation models and tensorflow
 """
-
-import numpy as np
+import sys
+sys.path.append("C:/Users/Arturo/PycharmProjects/Segm/")
 import tensorflow as tf
 import matplotlib.pyplot as plt
-import cv2
 import segmentation_models as sm
 import os
 from pathlib import Path
-from models.utils.generators import SegmDataGenerator
+from private_models.models.utils.generators import SegmDataGenerator
+from private_models.models.segmentation import pspunet
 
 
 class trainer:
@@ -21,8 +21,8 @@ class trainer:
                  num_classes=2,
                  batch_size=4,
                  epochs=10):
-        self.model = str(model).lower()
-        self.bacbone = backbone
+        self.model_name = str(model).lower()
+        self.backbone = backbone
         self.img_size = im_size
         self.batch_size = batch_size
         self.epochs = epochs
@@ -33,8 +33,9 @@ class trainer:
         self.train_gen = None
         self.val_gen = None
         self.callbacks = None
+        self.model = None
         self.metrics = []
-        self.input_shape = (self.img_size, self.img_size, 3)
+        self.input_shape = (None, None, 3)
         self.num_classes = num_classes
         if self.num_classes == 2:
             self.activation = "sigmoind"
@@ -42,18 +43,34 @@ class trainer:
             self.activation = "softmax"
 
     def model_builder(self):
-        if self.model is "unet":
-            mod = sm.Unet(self.bacbone, encoder_weights="imagenet", activation=self.activation,
-                          input_shape=self.input_shape, classes=self.num_classes)
-        elif self.model is "fpn":
-            mod = sm.FPN(self.bacbone, encoder_weights="imagenet", activation=self.activation,
-                         input_shape=self.input_shape, classes=self.num_classes)
+        if self.model_name == "unet":
+            if self.img_size % 32 != 0:
+                # unet requires an input multiple of 32
+                self.img_size = self.img_size - (self.img_size % 32)
+                print(f"Unet requires an input multiple of 32, image size set to {self.img_size}")
+            mod = sm.Unet(self.backbone, encoder_weights="imagenet", activation=self.activation,
+                          classes=self.num_classes)
 
-        elif self.model is "pspnet":
-            mod = sm.PSPNet(self.bacbone, encoder_weights="imagenet", activation=self.activation,
-                            input_shape=self.input_shape, classes=self.num_classes)
+        elif self.model_name == "fpn":
+            mod = sm.FPN(self.backbone, encoder_weights="imagenet", activation=self.activation,
+                         classes=self.num_classes)
+
+        elif self.model_name == "pspnet":
+            if self.img_size % 48 != 0:
+                # unet requires an input multiple of 32
+                self.img_size = self.img_size - (self.img_size % 48)
+                print(f"PSPnet requires an input multiple of 48, image size set to {self.img_size}")
+            mod = sm.PSPNet(self.backbone, encoder_weights="imagenet", activation=self.activation,
+                            classes=self.num_classes)
+        elif self.model_name == "pspunet":
+            if self.img_size % 32 != 0:
+                # unet requires an input multiple of 32
+                self.img_size = self.img_size - (self.img_size % 32)
+                print(f"PSP-Unet requires an input multiple of 32, image size set to {self.img_size}")
+            mod = pspunet.build_pspunet(self.backbone, classes=self.num_classes, encoder_weights="imagenet",
+                                        encoder_freeze=True, in_shape=(self.img_size, self.img_size, 3))
         else:
-            raise ValueError(f"Model name not supported, got {self.model}")
+            raise ValueError(f"Model name not supported, got {self.model_name}")
 
         return mod
 
@@ -80,22 +97,33 @@ class trainer:
         results = os.path.join(results, "results/")
         results = str(results)
         Path(results).mkdir(exist_ok=True, parents=True)
-        callbacks.append(tf.keras.callbacks.CSVLogger(results + "/logs.csv"))
-        callbacks.append(tf.keras.callbacks.ModelCheckpoint(results + "/final_weights.h5"))
+        callbacks.append(tf.keras.callbacks.CSVLogger(results + "/logs.csv", separator=";"))
+        callbacks.append(
+            tf.keras.callbacks.ModelCheckpoint(results + f"/{self.model_name}_{self.backbone}_final_weights.h5"))
         self.callbacks = callbacks
 
         self.metrics = [sm.metrics.IOUScore(name="iou_score"), sm.metrics.FScore(), sm.metrics.Precision(),
                         sm.metrics.Recall()]
 
         self.model = self.model_builder()
-        self.model.compile("Adam", loss=sm.losses.bce_dice_loss, metrics=self.metrics)
+        self.model.compile("Adam", loss=sm.losses.categorical_crossentropy, metrics=self.metrics)
         print("Model built")
+
+    def model_sum(self):
+        print(self.model.summary())
+
+    def load_prev_weights(self):
+        wpath = os.getcwd()
+        wpath = os.path.join(wpath, "results", f"{self.model_name}_{self.backbone}_final_weights.h5")
+        if Path(wpath).is_file():
+            self.model.load_weights(wpath)
+            print("Previously trained weights loaded")
 
     def train_model(self):
         print("\nInitializing training of model")
-        self.hist = self.model.fit_generator(self.train_gen, steps_per_epoc=self.steps, epochs=self.epochs,
+        self.load_prev_weights()
+        self.hist = self.model.fit_generator(self.train_gen, steps_per_epoch=self.steps, epochs=self.epochs,
                                              verbose=1, callbacks=self.callbacks, validation_data=self.val_gen)
 
-    def printhist(self):
+    def model_hist(self):
         print(self.hist)
-

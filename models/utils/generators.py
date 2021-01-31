@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-from PIL import Image
+import cv2
 
 
 class SegmDataGenerator(tf.keras.utils.Sequence):
@@ -70,10 +70,13 @@ class SegmDataGenerator(tf.keras.utils.Sequence):
         # Generate data
         for idx, (im, mk) in enumerate(zip(images, masks)):
             # Store sample
-            pic = Image.open(im)
-            pic = np.array(pic.resize((self.img_size, self.img_size)))
-            lab = Image.open(mk)
-            lab = np.array(lab.resize((self.img_size, self.img_size)))
+            pic = cv2.imread(str(im))
+            pic = cv2.cvtColor(pic, cv2.COLOR_BGR2RGB)
+            pic = np.array(cv2.resize(pic, (self.img_size, self.img_size)))
+            lab = cv2.imread(str(mk))
+            lab = cv2.cvtColor(lab, cv2.COLOR_BGR2GRAY)
+            lab = np.array(cv2.resize(lab, (self.img_size, self.img_size)))
+            lab = lab * self.n_classes / 255.0
             if self.augmentations is not None:
                 pic, lab = self.apply_augmentations(pic, lab)
             if not self.binmask:
@@ -81,5 +84,6 @@ class SegmDataGenerator(tf.keras.utils.Sequence):
 
             pictures[idx, :, :, :] = pic
             labels[idx, :, :, :] = lab
+
 
         return pictures, labels
