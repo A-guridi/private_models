@@ -38,26 +38,26 @@ def transform_gt(dir):
             mask.save(os.path.join(nwdir, f_name + ".png"))
     print("Ground truths transformed")
 
+
 def create_datasets(dir):
     if not Path(dir).is_dir():
         raise ValueError("Directory not found")
 
     sets = ["train", "val", "test"]
-    lb_sets=["train_labels", "val_labels", "test_labels"]
+    lb_sets = ["train_labels", "val_labels", "test_labels"]
     img_set = []
     lab_set = []
-    i=0
-    for ts, ls in zip(sets, lb_sets):
+
+    for idx, (ts, ls) in enumerate(zip(sets, lb_sets)):
         im_dir = os.path.join(dir, ts)
         lab_dir = os.path.join(dir, ls)
-        img_set.append([im for im in Path(im_dir).iterdir()])
-        lab_set.append([lb for lb in Path(lab_dir).iterdir()])
-        i+=1    # somehow enumerate didnt work
+        img_set[idx] = [im for im in Path(im_dir).iterdir()]
+        lab_set[idx] = [lb for lb in Path(lab_dir).iterdir()]
 
     train_df = pd.DataFrame({"image": img_set[0],
                              "label": lab_set[0]})
-    vaL_df = pd.DataFrame({"image": img_set[1],
+    val_df = pd.DataFrame({"image": img_set[1],
                            "label": lab_set[1]})
     test_df = pd.DataFrame({"image": img_set[2],
                             "label": lab_set[2]})
-    return train_df, vaL_df, test_df
+    return train_df, val_df, test_df

@@ -10,6 +10,7 @@ import cv2
 import segmentation_models as sm
 import os
 from pathlib import Path
+from private_models.models.utils.generators import SegmDataGenerator
 
 
 class trainer:
@@ -66,28 +67,13 @@ class trainer:
         print("Initializing creation of model")
 
         self.steps = train_data.shape[0] // self.batch_size
-        datagen = tf.keras.preprocessing.image.ImageDataGenerator(
-            featurewise_center=True,
-            featurewise_std_normalization=True,
-            rotation_range=20,
-            width_shift_range=0.2,
-            height_shift_range=0.2,
-            horizontal_flip=True
-        )
-        datagen.fit(train_data)
-        self.train_gen = datagen.flow_from_dataframe(train_data)
+
+        self.train_gen = SegmDataGenerator(train_data, batch_size=self.batch_size, img_size=self.img_size,
+                                           n_classes=self.num_classes)
 
         if val_data is not None:
-            val_gen = tf.keras.preprocessing.image.ImageDataGenerator(
-                featurewise_center=True,
-                featurewise_std_normalization=True,
-                rotation_range=20,
-                width_shift_range=0.2,
-                height_shift_range=0.2,
-                horizontal_flip=True
-            )
-            val_gen.fit(val_data)
-            self.val_gen = datagen.flow_from_dataframe(val_data)
+            self.val_gen = SegmDataGenerator(val_data, batch_size=self.batch_size, img_size=self.img_size,
+                                             n_classes=self.num_classes)
 
         callbacks = []
         results = os.getcwd()
@@ -103,6 +89,7 @@ class trainer:
 
         self.model = self.model_builder()
         self.model.compile("Adam", loss=sm.losses.bce_dice_loss, metrics=self.metrics)
+        print("Model built")
 
     def train_model(self):
         print("\nInitializing training of model")
