@@ -97,6 +97,5 @@ class trainer:
                                              verbose=1, callbacks=self.callbacks, validation_data=self.val_gen)
 
     def printhist(self):
-
         print(self.hist)
 
