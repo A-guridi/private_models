@@ -63,10 +63,10 @@ class trainer:
             mod = sm.PSPNet(self.backbone, encoder_weights="imagenet", activation=self.activation,
                             classes=self.num_classes)
         elif self.model_name == "pspunet":
-            if self.img_size % 32 != 0:
+            if self.img_size % 96 != 0:
                 # unet requires an input multiple of 32
-                self.img_size = self.img_size - (self.img_size % 32)
-                print(f"PSP-Unet requires an input multiple of 32, image size set to {self.img_size}")
+                self.img_size = self.img_size - (self.img_size % 96)
+                print(f"PSP-Unet requires an input multiple of 48, image size set to {self.img_size}")
             mod = pspunet.build_pspunet(self.backbone, classes=self.num_classes, encoder_weights="imagenet",
                                         encoder_freeze=True, in_shape=(self.img_size, self.img_size, 3))
         else:
@@ -82,7 +82,7 @@ class trainer:
         :return: None, it initalizes the model
         """
         print("Initializing creation of model")
-
+        self.model = self.model_builder()
         self.steps = train_data.shape[0] // self.batch_size
 
         self.train_gen = SegmDataGenerator(train_data, batch_size=self.batch_size, img_size=self.img_size,
@@ -105,7 +105,6 @@ class trainer:
         self.metrics = [sm.metrics.IOUScore(name="iou_score"), sm.metrics.FScore(), sm.metrics.Precision(),
                         sm.metrics.Recall()]
 
-        self.model = self.model_builder()
         self.model.compile("Adam", loss=sm.losses.categorical_crossentropy, metrics=self.metrics)
         print("Model built")
 
@@ -126,4 +125,21 @@ class trainer:
                                              verbose=1, callbacks=self.callbacks, validation_data=self.val_gen)
 
     def model_hist(self):
-        print(self.hist)
+        plt.figure(figsize=(30, 5))
+        plt.subplot(121)
+        plt.plot(self.hist.history['iou_score'])
+        plt.plot(self.hist.history['val_iou_score'])
+        plt.title('Model iou_score')
+        plt.ylabel('iou_score')
+        plt.xlabel('Epoch')
+        plt.legend(['Train', 'Test'], loc='upper left')
+
+        # Plot training & validation loss values
+        plt.subplot(122)
+        plt.plot(self.hist.history['loss'])
+        plt.plot(self.hist.history['val_loss'])
+        plt.title('Model loss')
+        plt.ylabel('Loss')
+        plt.xlabel('Epoch')
+        plt.legend(['Train', 'Test'], loc='upper left')
+        plt.show()

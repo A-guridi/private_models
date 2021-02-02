@@ -1,16 +1,10 @@
 import tensorflow as tf
-import segmentation_models as sm
+from tensorflow.keras import layers
+from segmentation_models import PSPNet
 from segmentation_models.backbones.backbones_factory import Backbones
 from segmentation_models.models._utils import freeze_model, get_submodules_from_kwargs
 from segmentation_models.models.pspnet import SpatialContextBlock
 from private_models.models.utils.custom_layers import convblock, atrous_convblock
-from classification_models.tfkeras import Classifiers
-
-backend = None
-layers = None
-models = None
-keras_utils = None
-
 
 # copied from qubvel, weirdly not downloaded in package
 def filter_keras_submodules(kwargs):
@@ -20,6 +14,7 @@ def filter_keras_submodules(kwargs):
 
 
 def build_PSP(x, conv_filters=512, pooling_type="avg", use_batchnorm=True):
+    # old function to manually implement the PSP net
     x1 = SpatialContextBlock(1, conv_filters, pooling_type, use_batchnorm)(x)
     x2 = SpatialContextBlock(2, conv_filters, pooling_type, use_batchnorm)(x)
     x3 = SpatialContextBlock(3, conv_filters, pooling_type, use_batchnorm)(x)
@@ -33,22 +28,18 @@ def build_PSP(x, conv_filters=512, pooling_type="avg", use_batchnorm=True):
 
 def decode_up(x, skip, nfilters):
     # upsamples x2 the layer and adds the skip connection with the next layer
-    x = convblock(x, nfilters)
     x = layers.UpSampling2D()(x)
     x = layers.Concatenate(axis=3)([x, skip])
     x = convblock(x, nfilters)
-    x = layers.Dropout(0.3)(x)
     return x
 
 
 def decode_atrous(x, skip, nfilters):
     # upsamples x2 the layer and adds the skip connection with the next layer
     # adds the atrous convolution
-    x = atrous_convblock(x, nfilters)
     x = layers.UpSampling2D()(x)
     x = layers.Concatenate(axis=3)([x, skip])
     x = atrous_convblock(x, nfilters)
-    x = layers.Dropout(0.3)(x)
     return x
 
 
@@ -89,54 +80,69 @@ def build_pspunet(backbone_name='resnet50',
         ``keras.models.Model``: **PSPUnet**
     """
     # added lines from the quvbel package
-    global backend, layers, models, keras_utils
-    submodule_args = filter_keras_submodules(kwargs)
-    backend, layers, models, keras_utils = get_submodules_from_kwargs(submodule_args)
     if classes == 2:
         activation = "sigmoid"
         outchannels = 1
     else:
         outchannels = classes
         activation = "softmax"
-    # backbone = Backbones.get_backbone(
-    #     backbone_name,
-    #     input_shape=in_shape,
-    #     weights=encoder_weights,
-    #     include_top=False,
-    #     **kwargs
-    # )
-    backbone_model, preproccess_input = Classifiers.get(backbone_name)
-    backbone = backbone_model(input_shape=in_shape, weights=encoder_weights, include_top=False)
-    #if encoder_freeze:
-    #    freeze_model(backbone)
-    if encoder_features == "default":
-        encoder_features = Backbones.get_feature_layers(backbone_name)
 
-    input_ = backbone.input
-    x = backbone.output
+    model = PSPNet(backbone_name=backbone_name,
+                   input_shape=in_shape,
+                   classes=classes,
+                   activation=activation,
+                   encoder_weights='imagenet',
+                   encoder_freeze=encoder_freeze,
+                   downsample_factor=16,
+                   psp_conv_filters=512,
+                   psp_pooling_type='avg',
+                   psp_use_batchnorm=True,
+                   psp_dropout=None)
 
-    # extract skip connections
-    skips = [backbone.get_layer(name=i).output if isinstance(i, str)
-             else backbone.get_layer(index=i).output for i in encoder_features]
-
-    x = build_PSP(x)
-
-    x = layers.Dropout(0.3)(x)
+    # extract the skip connections layers
+    fet_layers = Backbones.get_feature_layers(backbone_name)
+    skips = [0] * len(fet_layers)
+    for idx, l in enumerate(fet_layers):
+        if isinstance(l, str):
+            skips[idx] = model.get_layer(name=l).output
+        else:
+            skips[idx] = model.get_layer(index=l).output
 
     # start the upsampling
     if "vgg" in backbone_name:
         # in the vgg case, we need to add an additional layer
-        x = decode_up(x, skips[0], decoder_filters[0])
-        skips = skips[1:]
-    decoder_filters = decoder_filters[1:]
+        skip_0 = skips[4]
+    else:
+        skip_0 = convblock(model.input, filters=32, names="encoder-384")
 
-    for i in range(4):
-        x = decode_up(x, skips[i], decoder_filters[i])
+    # we start building the net from bottom to top, being each layer bigger and applying 2 convolutions after
+    # each concatenation
 
-    # final layer
-    x = layers.Conv2D(filters=outchannels, kernel_size=(3, 3), name="output")(x)
-    output = layers.Activation(activation)(x)
+    pspout = convblock(skips[0], filters=512)
 
-    model = tf.keras.Model(input_, output)
+    dec_24 = layers.UpSampling2D((2, 2), name="up_24")(pspout)
+    dec_24 = layers.Concatenate(name="conc_24")([dec_24, skips[1]])
+    dec_24 = convblock(dec_24, filters=decoder_filters[0], names="conv_24")
+
+    dec_48 = layers.UpSampling2D((2, 2), name="up_48")(dec_24)
+    dec_48 = layers.Concatenate(name="conc_48")([skips[2], dec_48])
+    # dec_48 = convblock(dec_48, filters=decoder_filters[1], names="conv_48")
+    dec_48 = atrous_convblock(dec_48, filters=decoder_filters[1], names="conv_48")
+
+    # test if dilated conv really offers better results
+    dec_96 = layers.UpSampling2D((2, 2), name="up_96")(dec_48)
+    dec_96 = layers.Concatenate(name="conc_96")([skips[3], dec_96])
+    # dec_96 = convblock(dec_96, filters=decoder_filters[2], names="conv_96")
+    dec_96 = atrous_convblock(dec_96, filters=decoder_filters[2], names="conv_96")
+
+    dec_192 = layers.UpSampling2D((2, 2), name="up_192")(dec_96)
+    dec_192 = layers.Concatenate(name="conc_192")([skip_0, dec_192])
+    dec_192 = convblock(dec_192, filters=decoder_filters[3], names="conv_192")
+
+    # output layer
+    out_layer = layers.Conv2D(filters=outchannels, kernel_size=3, padding="same", name="output_conv")(dec_192)
+    out_layer = layers.Activation(activation, name="out_act")(out_layer)
+
+    model = tf.keras.Model(inputs=model.input, outputs=out_layer)
 
     return model
