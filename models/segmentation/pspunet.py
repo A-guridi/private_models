@@ -48,7 +48,6 @@ def build_pspunet(backbone_name='resnet50',
                   classes=1,
                   encoder_weights='imagenet',
                   encoder_freeze=False,
-                  encoder_features='default',
                   decoder_block_type='upsampling',
                   decoder_filters=(256, 128, 64, 32, 16),
                   decoder_use_batchnorm=True,
@@ -91,7 +90,7 @@ def build_pspunet(backbone_name='resnet50',
                    input_shape=in_shape,
                    classes=classes,
                    activation=activation,
-                   encoder_weights='imagenet',
+                   encoder_weights=encoder_weights,
                    encoder_freeze=encoder_freeze,
                    downsample_factor=16,
                    psp_conv_filters=512,
@@ -101,12 +100,12 @@ def build_pspunet(backbone_name='resnet50',
 
     # extract the skip connections layers
     fet_layers = Backbones.get_feature_layers(backbone_name)
-    skips = [0] * len(fet_layers)
-    for idx, l in enumerate(fet_layers):
-        if isinstance(l, str):
-            skips[idx] = model.get_layer(name=l).output
+    skips = []
+    for lay in fet_layers:
+        if isinstance(lay, str):
+            skips.append(model.get_layer(name=lay).output)
         else:
-            skips[idx] = model.get_layer(index=l).output
+            skips.append(model.get_layer(index=lay).output)
 
     # start the upsampling
     if "vgg" in backbone_name:

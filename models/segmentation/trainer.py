@@ -3,6 +3,7 @@ Trainer class that creates a segmentation model and trains it
 Using quvbel segmentation models and tensorflow
 """
 import sys
+
 sys.path.append("C:/Users/Arturo/PycharmProjects/Segm/")
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -121,8 +122,8 @@ class trainer:
     def train_model(self):
         print("\nInitializing training of model")
         self.load_prev_weights()
-        self.hist = self.model.fit_generator(self.train_gen, steps_per_epoch=self.steps, epochs=self.epochs,
-                                             verbose=1, callbacks=self.callbacks, validation_data=self.val_gen)
+        self.hist = self.model.fit(self.train_gen, steps_per_epoch=self.steps, epochs=self.epochs,
+                                   verbose=1, callbacks=self.callbacks, validation_data=self.val_gen)
 
     def model_hist(self):
         plt.figure(figsize=(30, 5))
